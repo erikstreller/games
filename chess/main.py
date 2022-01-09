@@ -32,7 +32,7 @@ def initialize_board() -> None:
     board[7][0] = ChessPiece(ChessPieceType.ROOK, ChessPieceColor.BLACK)
 
     for i in range(8):
-        board[i][5] = ChessPiece(ChessPieceType.PAWN, ChessPieceColor.BLACK)
+        board[i][1] = ChessPiece(ChessPieceType.PAWN, ChessPieceColor.BLACK)
 
     for j in range(8):
         board[j][6] = ChessPiece(ChessPieceType.PAWN, ChessPieceColor.WHITE)
@@ -82,9 +82,14 @@ def transform_y(input_y: int) -> int:
     return y[input_y]
 
 
-def playerTurn(color: ChessPieceColor) -> None:
+def wrong_input():
+    print("Please enter the matching letter and position of the piece, e.g. Nb1 or Pe7")
+
+
+def player_turn(color: ChessPieceColor):
     """A Turn where the player can choose a chess piece at a certain position and
     move it to a new position."""
+    # FIXME: return type
 
     index0 = ("R", "N", "B", "Q", "K", "P")
     index1 = ("a", "b", "c", "d", "e", "f", "g", "h")
@@ -92,27 +97,110 @@ def playerTurn(color: ChessPieceColor) -> None:
 
     choose_piece = input(f"{color.value}Choose a chess piece: {TextFormating.END}")
 
-    # TODO: add safty for input, e.g. Ba1 but Ra1 would be correct
-    # FIXME: currently the input from choose_piece[0] is compared with the whole list in index0
-    # not only with the ChessPieceType at the position choose_piece[1] and choose_piece[2]
-    if len(choose_piece) == 3:
-        if (
-            choose_piece[0].upper() in index0
-            and choose_piece[1].lower() in index1
-            and choose_piece[2] in index2
-        ):
-            input_x = choose_piece[1].lower()
-            input_y = int(choose_piece[2]) - 1
-            x = transform_x(input_x)
-            y = transform_y(input_y)
+    if len(choose_piece) != 3:
+        wrong_input()
+        return player_turn(color)
+    if (
+        choose_piece[0].upper() not in index0
+        and choose_piece[1].lower() not in index1
+        and choose_piece[2] not in index2
+    ):
+        wrong_input()
+        return player_turn(color)
 
-            return movement_options(board[x][y], x, y, board)
+    input_x = choose_piece[1].lower()
+    input_y = int(choose_piece[2]) - 1
+    x = transform_x(input_x)
+    y = transform_y(input_y)
+
+    if board[x][y].type.value != choose_piece[0].upper():
+        wrong_input()
+        return player_turn(color)
+
+    options = movement_options(board[x][y], x, y, board)
+    move_to = player_move(color, options)
+    move_piece(board[x][y], x, y, move_to, options)
+
+
+def player_move(color: ChessPieceColor, options: list) -> int:
+    """Takes the movement options for the choosen piece. Displays the
+    input number for the available movement options and"""
+
+    for i in range(len(options)):
+        target_position = options[i]
+        target_type = board[target_position[0]][target_position[1]].type
+
+        if target_type == ChessPieceType.EMPTY:
+            print(f"({i + 1}) {transform(options[i])}")
+
+        if target_type != ChessPieceType.EMPTY:
+            if color == ChessPieceColor.BLACK:
+                print(
+                    f"{ChessPieceColor.WHITE.value}({i + 1}) {target_type.value}{transform(options[i])}{TextFormating.END}"
+                )
+            if color == ChessPieceColor.WHITE:
+                print(
+                    f"{ChessPieceColor.BLACK.value}({i + 1}) {target_type.value}{transform(options[i])}{TextFormating.END}"
+                )
+
+    move_to = input("Move to?: ")
+    try:
+        int(move_to)
+    except ValueError:
+        if len(options) != 1:
+            print(f"Invalid Input. Enter a number between 1 and {len(options)}.")
+            return player_move(color, options)
         else:
-            print("Please enter the letter and position of the piece, e.g. Nb1 or Pe7")
-            return playerTurn(color)
+            print(f"Invalid Input. To only valid move is number 1.")
+            return player_move(color, options)
+
+    if int(move_to) > len(options) or int(move_to) <= 0:
+        print(f"Invalid Input. Enter a number between 1 and {len(options)}.")
+        return player_move(color, options)
+
+    return int(move_to)
+
+
+def move_piece(
+    self: ChessPiece, x: int, y: int, move_to: int, options: list[list[int]]
+) -> None:
+    """Sets origin to empty and destination to chess piece opbject."""
+
+    board[x][y] = ChessPiece(ChessPieceType.EMPTY, self.color)
+
+    xx, yy = options[move_to - 1]
+    board[xx][yy] = ChessPiece(self.type, self.color)
+
+
+def transform(input: list[int]) -> str:
+    """Transform the internal coordinate system to chess coordinate pairs."""
+
+    x, y = input[0], input[1]
+
+    visual_x = ("a", "b", "c", "d", "e", "f", "g", "h")
+    visual_y = ("8", "7", "6", "5", "4", "3", "2", "1")
+
+    display_x = visual_x[x]
+    display_y = visual_y[y]
+
+    output = display_x + display_y
+    return output
+
+
+################### win? ####################
+
+
+def win() -> bool:
+    two_kings = []
+    for i in range(8):
+        for j in range(8):
+            if board[i][j].type == ChessPieceType.KING:
+                two_kings.append(board[i][j].type.value)
+
+    if len(two_kings) != 2:
+        return True
     else:
-        print("Please enter the letter and position of the piece, e.g. Nb1 or Pe7")
-        return playerTurn(color)
+        return False
 
 
 ################### main ####################
@@ -125,7 +213,13 @@ def main() -> None:
     initialize_board()
     draw_board()
     print("")
-    playerTurn(ChessPieceColor.BLACK)
+    while not win():
+        player_turn(ChessPieceColor.WHITE)
+        draw_board()
+        if not win():
+            player_turn(ChessPieceColor.BLACK)
+            draw_board()
+
     print("")
 
 
